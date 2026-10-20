@@ -25,7 +25,7 @@ The active backend code includes:
 - client disconnect cancellation watcher
 - Tamil speech transcription with NeMo
 
-The grocery parser logic is defined in a staged design in `grocery_parser.py`, but the file currently contains a large commented-out prototype, so the live parser behavior depends on the implementation used in the active environment.
+`grocery_parser.py` uses `llama.cpp` through `llama-cpp-python` to load the local Qwen GGUF model and parse the ASR transcript into grocery items.
 
 ## Core API
 
@@ -84,17 +84,23 @@ Why this model is used:
 - It works well for voice commands recorded by users on a phone or microphone.
 - It is a NeMo model, which matches the project’s ASR implementation and runtime setup.
 
-How to install it:
-1. Download or obtain the `.nemo` checkpoint file for the Tamil IndicConformer model.
-2. Place it inside the project folder under:
+Download the checkpoint from the [AI4Bharat model page](https://huggingface.co/ai4bharat/indicconformer_stt_ta_hybrid_rnnt_large). From the project directory in Ubuntu/WSL, run:
+
 ```bash
-/home/hari/voicesearch_ai/models/
+python -m pip install -U "huggingface_hub[cli]"
+mkdir -p models
+hf download ai4bharat/indicconformer_stt_ta_hybrid_rnnt_large \
+  indicconformer_stt_ta_hybrid_rnnt_large.nemo \
+  --local-dir models
 ```
-3. Make sure the file name matches the path in `speech_service.py`:
+
+If Hugging Face requires authentication or model access, sign in with an account that has access, then retry:
+
 ```bash
-indicconformer_stt_ta_hybrid_rnnt_large.nemo
+hf auth login
 ```
-4. If your download uses a different file name, update the `MODEL_PATH` in `speech_service.py`.
+
+The downloaded file should be at `models/indicconformer_stt_ta_hybrid_rnnt_large.nemo`. This matches the path configured in `speech_service.py` when the repository is at `/home/hari/voicesearch_ai`. If your project is in another location, update `MODEL_PATH` in that file.
 
 Example:
 ```python
@@ -118,13 +124,17 @@ Why this model is used:
 - It helps interpret natural speech, quantities, product names, and search intents.
 - It is useful for parsing spoken Tamil grocery commands into meaningful item lists.
 
-How to install it:
-1. Download the Qwen3-1.7B Q4 GGUF model file.
-2. Place it inside:
+Download the quantized GGUF file from the [official Qwen model page](https://huggingface.co/Qwen/Qwen3-1.7B-GGUF). From the project directory in Ubuntu/WSL, run:
+
 ```bash
-/home/hari/voicesearch_ai/models/
+python -m pip install -U "huggingface_hub[cli]"
+mkdir -p models
+hf download Qwen/Qwen3-1.7B-GGUF \
+  Qwen3-1.7B-Q4_K_M.gguf \
+  --local-dir models
 ```
-3. Ensure the file name matches the expected path in `grocery_parser.py`.
+
+The downloaded file should be at `models/Qwen3-1.7B-Q4_K_M.gguf`. This matches the path configured in `grocery_parser.py` when the repository is at `/home/hari/voicesearch_ai`. If your project is in another location, update `MODEL_PATH` in that file.
 
 Example:
 ```python
@@ -134,9 +144,10 @@ MODEL_PATH = (
 )
 ```
 
-Important note:
-- The project currently contains the parser logic as a commented-out prototype, so the active runtime may depend on the exact model file and implementation available in your local environment.
-- If the model files are missing, the app will fail when the model loader is invoked.
+Important:
+- Model checkpoints are large and are intentionally excluded from Git. Download them separately on each development/deployment machine rather than committing them to the repository.
+- Check each model page for its license and any access requirements before downloading or using it.
+- The application cannot start successfully if a required model file is missing or the configured path is incorrect.
 
 ## Why it runs on Ubuntu only
 
