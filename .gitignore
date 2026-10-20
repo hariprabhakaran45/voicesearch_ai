@@ -1,0 +1,15 @@
+.env
+.venv/
+venv/
+NeMo/
+__pycache__/
+*.py[cod]
+*.log
+
+# Model checkpoints are large; use Git LFS if they need to be versioned.
+models/
+
+# Local test recordings
+test_*.wav
+NeMo/
+.vscode/

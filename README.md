@@ -1,93 +1,239 @@
-# CT voicesearch AI
+# Yuganchin Voice Search AI
+
+A FastAPI-based voice search service for grocery shopping workflows. The system captures user audio, converts it to a normalized WAV file, transcribes Tamil speech with NeMo ASR, and prepares the transcript for a grocery item parser. It includes request cancellation handling so that a client disconnect stops the in-flight processing cleanly.
+
+## Project overview
+
+This project is organized around a simple AI processing pipeline:
+
+- `app.py` exposes the HTTP API and orchestrates the request lifecycle.
+- `speech_service.py` loads the Tamil IndicConformer ASR model and transcribes audio.
+- `ai_queue.py` serializes expensive AI work so only one request uses the model stack at a time.
+- `grocery_parser.py` is the grocery parsing layer and is designed to interpret the transcript into structured shopping items.
+- `.env` contains the API key used by the backend.
+- `models/` is expected to hold the local model files used by the app.
+
+## Current implementation status
+
+The active backend code includes:
+
+- health check endpoint
+- authenticated audio upload endpoint
+- audio validation and temporary file handling
+- FFmpeg conversion to 16 kHz mono WAV
+- queue-based AI access control
+- client disconnect cancellation watcher
+- Tamil speech transcription with NeMo
+
+The grocery parser logic is defined in a staged design in `grocery_parser.py`, but the file currently contains a large commented-out prototype, so the live parser behavior depends on the implementation used in the active environment.
+
+## Core API
+
+### Health check
+
+Endpoint:
+- `GET /health`
+
+Response:
+- service status
+- speech model name
+- parser model name
+
+### Voice search
+
+Endpoint:
+- `POST /voice-search`
+
+Headers:
+- `API-Key: <secret-key>`
+
+Form fields:
+- `audio` multipart file upload
 
 
 
-## Getting started
+Expected behavior:
+1. Validate the uploaded audio file.
+2. Save the original file temporarily.
+3. Convert to 16 kHz mono WAV with FFmpeg.
+4. Put the request through the AI request queue.
+5. Transcribe with the IndicConformer model.
+6. Parse the transcript into grocery items.
+7. Return a JSON payload with `status`, `transcript`, and `items`.
 
-To make it easy for you to get started with GitLab, here's a list of recommended next steps.
+### Queue status
 
-Already a pro? Just edit this README.md and make it your own. Want to make it easy? [Use the template at the bottom](#editing-this-readme)!
+Endpoint:
+- `GET /queue-status`
 
-## Add your files
+This returns queue state including active processing and waiting requests.
 
-* [Create](https://docs.gitlab.com/user/project/repository/web_editor/#create-a-file) or [upload](https://docs.gitlab.com/user/project/repository/web_editor/#upload-a-file) files
-* [Add files using the command line](https://docs.gitlab.com/topics/git/add_files/#add-files-to-a-git-repository) or push an existing Git repository with the following command:
+## Models used and why they are required
 
+This project currently uses two main AI components:
+
+### 1) IndicConformer Tamil ASR model
+
+Model used in code:
+- `IndicConformer Tamil`
+- model file path in `speech_service.py`: `/home/hari/voicesearch_ai/models/indicconformer_stt_ta_hybrid_rnnt_large.nemo`
+
+Why this model is used:
+- It is a Tamil speech-to-text model designed for automatic speech recognition.
+- It is appropriate for transcribing spoken Tamil and mixed Tamil/English style grocery requests.
+- It works well for voice commands recorded by users on a phone or microphone.
+- It is a NeMo model, which matches the project’s ASR implementation and runtime setup.
+
+How to install it:
+1. Download or obtain the `.nemo` checkpoint file for the Tamil IndicConformer model.
+2. Place it inside the project folder under:
+```bash
+/home/hari/voicesearch_ai/models/
 ```
-cd existing_repo
-git remote add origin https://gitlab.com/CT-products/eyeon/ct-voicesearch-ai.git
-git branch -M main
-git push -uf origin main
+3. Make sure the file name matches the path in `speech_service.py`:
+```bash
+indicconformer_stt_ta_hybrid_rnnt_large.nemo
+```
+4. If your download uses a different file name, update the `MODEL_PATH` in `speech_service.py`.
+
+Example:
+```python
+MODEL_PATH = (
+    "/home/hari/voicesearch_ai/models/"
+    "indicconformer_stt_ta_hybrid_rnnt_large.nemo"
+)
 ```
 
-## Integrate with your tools
+### 2) Qwen3-1.7B parser model
 
-* [Set up project integrations](https://gitlab.com/CT-products/eyeon/ct-voicesearch-ai/-/settings/integrations)
+The code references a parser model for grocery item extraction:
+- `Qwen3-1.7B`
+- model file path appears in `grocery_parser.py` as a GGUF file:
+```text
+/home/hari/voicesearch_ai/models/Qwen3-1.7B-Q4_K_M.gguf
+```
 
-## Collaborate with your team
+Why this model is used:
+- It is meant to convert the ASR transcript into structured grocery items.
+- It helps interpret natural speech, quantities, product names, and search intents.
+- It is useful for parsing spoken Tamil grocery commands into meaningful item lists.
 
-* [Invite team members and collaborators](https://docs.gitlab.com/user/project/members/)
-* [Create a new merge request](https://docs.gitlab.com/user/project/merge_requests/creating_merge_requests/)
-* [Automatically close issues from merge requests](https://docs.gitlab.com/user/project/issues/managing_issues/#closing-issues-automatically)
-* [Enable merge request approvals](https://docs.gitlab.com/user/project/merge_requests/approvals/)
-* [Set auto-merge](https://docs.gitlab.com/user/project/merge_requests/auto_merge/)
+How to install it:
+1. Download the Qwen3-1.7B Q4 GGUF model file.
+2. Place it inside:
+```bash
+/home/hari/voicesearch_ai/models/
+```
+3. Ensure the file name matches the expected path in `grocery_parser.py`.
 
-## Test and Deploy
+Example:
+```python
+MODEL_PATH = (
+    "/home/hari/voicesearch_ai/models/"
+    "Qwen3-1.7B-Q4_K_M.gguf"
+)
+```
 
-Use the built-in continuous integration in GitLab.
+Important note:
+- The project currently contains the parser logic as a commented-out prototype, so the active runtime may depend on the exact model file and implementation available in your local environment.
+- If the model files are missing, the app will fail when the model loader is invoked.
 
-* [Get started with GitLab CI/CD](https://docs.gitlab.com/ci/quick_start/)
-* [Analyze your code for known vulnerabilities with Static Application Security Testing (SAST)](https://docs.gitlab.com/user/application_security/sast/)
-* [Deploy to Kubernetes, Amazon EC2, or Amazon ECS using Auto Deploy](https://docs.gitlab.com/topics/autodevops/requirements/)
-* [Use pull-based deployments for improved Kubernetes management](https://docs.gitlab.com/user/clusters/agent/)
-* [Set up protected environments](https://docs.gitlab.com/ci/environments/protected_environments/)
+## Why it runs on Ubuntu only
 
-***
+This project is designed for the Ubuntu/WSL environment because the application expects Linux-style paths and a native Linux toolchain for the ML workflow. In particular:
 
-# Editing this README
+- The speech model path is set to a Linux filesystem location under `/home/hari/voicesearch_ai/models/...`.
+- The project assumes a Unix environment for Python virtual environments, shell scripts, and local model loading.
+- The backend relies on FFmpeg and a Linux-compatible NeMo/PyTorch runtime stack.
+- The project was built to run in WSL (Windows Subsystem for Linux), which provides the Ubuntu environment needed by the models and tools.
 
-When you're ready to make this README your own, just edit this file and use the handy template below (or feel free to structure it however you want - this is just a starting point!). Thanks to [makeareadme.com](https://www.makeareadme.com/) for this template.
+This is why Windows-native execution is not the intended runtime for the current setup. The application is optimized for Ubuntu or WSL, not for a standard Windows CMD/PowerShell workflow.
 
-## Suggestions for a good README
+## How to open Ubuntu OS / WSL
 
-Every project is different, so consider which of these sections apply to yours. The sections used in the template are suggestions for most open source projects. Also keep in mind that while a README can be too long and detailed, too long is better than too short. If you think your README is too long, consider utilizing another form of documentation rather than cutting out information.
+If you are on Windows, open Ubuntu from the Start menu or run this in Command Prompt or PowerShell:
 
-## Name
-Choose a self-explaining name for your project.
+```bash
+wsl
+```
 
-## Description
-Let people know what your project can do specifically. Provide context and add a link to any reference visitors might be unfamiliar with. A list of Features or a Background subsection can also be added here. If there are alternatives to your project, this is a good place to list differentiating factors.
+If Ubuntu is not installed yet, install it first:
 
-## Badges
-On some READMEs, you may see small images that convey metadata, such as whether or not all the tests are passing for the project. You can use Shields to add some to your README. Many services also have instructions for adding a badge.
+```bash
+wsl --install -d Ubuntu
+```
 
-## Visuals
-Depending on what you are making, it can be a good idea to include screenshots or even a video (you'll frequently see GIFs rather than actual videos). Tools like ttygif can help, but check out Asciinema for a more sophisticated method.
+Then, once inside Ubuntu, go to the project folder:
 
-## Installation
-Within a particular ecosystem, there may be a common way of installing things, such as using Yarn, NuGet, or Homebrew. However, consider the possibility that whoever is reading your README is a novice and would like more guidance. Listing specific steps helps remove ambiguity and gets people to using your project as quickly as possible. If it only runs in a specific context like a particular programming language version or operating system or has dependencies that have to be installed manually, also add a Requirements subsection.
+```bash
+cd /home/hari/voicesearch_ai
+```
 
-## Usage
-Use examples liberally, and show the expected output if you can. It's helpful to have inline the smallest example of usage that you can demonstrate, while providing links to more sophisticated examples if they are too long to reasonably include in the README.
+If your project is in another WSL location, use:
 
-## Support
-Tell people where they can go to for help. It can be any combination of an issue tracker, a chat room, an email address, etc.
+```bash
+cd /home/<your-username>/<your-project-folder>
+```
 
-## Roadmap
-If you have ideas for releases in the future, it is a good idea to list them in the README.
+For example:
 
-## Contributing
-State if you are open to contributions and what your requirements are for accepting them.
+```bash
+cd /home/hari/voicesearch_ai
+```
 
-For people who want to make changes to your project, it's helpful to have some documentation on how to get started. Perhaps there is a script that they should run or some environment variables that they need to set. Make these steps explicit. These instructions could also be useful to your future self.
+Then activate the environment and run the app:
 
-You can also document commands to lint the code or run tests. These steps help to ensure high code quality and reduce the likelihood that the changes inadvertently break something. Having instructions for running tests is especially helpful if it requires external setup, such as starting a Selenium server for testing in a browser.
+```bash
+python -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+uvicorn app:app --reload --host 0.0.0.0 --port 8000
+```
 
-## Authors and acknowledgment
-Show your appreciation to those who have contributed to the project.
+## Required environment
 
-## License
-For open source projects, say how it is licensed.
+### Python
+- Python 3.10+ recommended
 
-## Project status
-If you have run out of energy or time for your project, put a note at the top of the README saying that development has slowed down or stopped completely. Someone may choose to fork your project or volunteer to step in as a maintainer or owner, allowing your project to keep going. You can also make an explicit request for maintainers.
+### System dependency
+- FFmpeg must be installed and available on PATH
+
+Example Ubuntu installation:
+```bash
+sudo apt update
+sudo apt install ffmpeg
+```
+
+## Setup
+
+1. Create and activate a virtual environment:
+```bash
+python -m venv .venv
+source .venv/bin/activate
+```
+
+2. Install dependencies:
+```bash
+pip install -r requirements.txt
+```
+
+3. Configure the API key:
+Create a `.env` file in the project root with:
+```bash
+VOICE_SEARCH_API_KEY=your-long-random-secret-key
+```
+
+4. Place the required model files in `models/` and update the model paths in `speech_service.py` and `grocery_parser.py` if necessary.
+
+5. Start the service:
+```bash
+uvicorn app:app --reload --host 0.0.0.0 --port 8000
+```
+
+
+
+## Notes
+
+- The application is built around a single-server AI queue to avoid overlapping model inference.
+- Request cancellation is handled by watching the HTTP disconnect state.
+- The project appears to be a prototype or custom deployment for Tamil grocery voice search and may require model files and local path tuning for a production environment.
