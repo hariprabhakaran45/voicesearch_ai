@@ -15,34 +15,37 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, "/app")
 
 # ──────────────────────────────────────────────────────────
-# RUNTIME PATHS (inside container, ephemeral)
+# RUNTIME PATHS
 # ──────────────────────────────────────────────────────────
 QWEN_MODEL_DIR = "/app/models"
 QWEN_MODEL_PATH = "/app/models/Qwen3-1.7B-Q4_K_M.gguf"
 WHISPER_MODEL_DIR = "/app/models/whisper"
 
-# ============================================================
-# 0. Download Qwen3 if not present (Using Python API)
-# ============================================================
 os.makedirs(QWEN_MODEL_DIR, exist_ok=True)
 os.makedirs(WHISPER_MODEL_DIR, exist_ok=True)
 
+# ============================================================
+# 0. Download Qwen3 if not present
+# ============================================================
 if not os.path.exists(QWEN_MODEL_PATH):
     print("=" * 60, flush=True)
     print("Qwen3 model not found. Downloading from HuggingFace...", flush=True)
-    print("This may take 2-3 minutes on first startup.", flush=True)
     print("=" * 60, flush=True)
 
     try:
         from huggingface_hub import hf_hub_download
         
-        # Download the file directly to our models directory
-        hf_hub_download(
-            repo_id="Qwen/Qwen3-1.7B-GGUF",
+        # CORRECT REPO: Qwen/Qwen3-1.7B (not -GGUF suffix)
+        downloaded_path = hf_hub_download(
+            repo_id="Qwen/Qwen3-1.7B",
             filename="Qwen3-1.7B-Q4_K_M.gguf",
             local_dir=QWEN_MODEL_DIR,
-            local_dir_use_symlinks=False
         )
+        
+        # Rename to our expected path for simplicity
+        if os.path.exists(downloaded_path) and downloaded_path != QWEN_MODEL_PATH:
+            os.rename(downloaded_path, QWEN_MODEL_PATH)
+            
         print("Qwen3 download complete.", flush=True)
     except Exception as e:
         print(f"FATAL: Qwen3 download failed: {e}", flush=True)
@@ -52,7 +55,7 @@ else:
 
 
 # ============================================================
-# 1. Load Whisper (auto-download to WHISPER_MODEL_DIR)
+# 1. Load Whisper
 # ============================================================
 print("=" * 60, flush=True)
 print("Loading Whisper (Speech-to-Text)...", flush=True)
