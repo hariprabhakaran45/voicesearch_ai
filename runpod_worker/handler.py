@@ -1,13 +1,14 @@
 # ============================================================
 # Yuganchin Voice Search AI — RunPod Serverless Handler
 # Whisper (English + Tamil) + Qwen3 (Grocery Parser)
-# Models loaded from Network Volume: /runpod-volume/
+# Models downloaded at runtime (no Network Volume)
 # ============================================================
 
 import runpod
 import base64
 import os
 import sys
+import subprocess
 import tempfile
 import traceback
 
@@ -15,26 +16,47 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, "/app")
 
 # ──────────────────────────────────────────────────────────
-# NETWORK VOLUME PATHS
+# RUNTIME PATHS (inside container, ephemeral)
 # ──────────────────────────────────────────────────────────
-QWEN_MODEL_PATH = os.getenv(
-    "QWEN_MODEL_PATH",
-    "/runpod-volume/Qwen3-1.7B-Q4_K_M.gguf",
-)
+QWEN_MODEL_DIR = "/app/models"
+QWEN_MODEL_PATH = "/app/models/Qwen3-1.7B-Q4_K_M.gguf"
+WHISPER_MODEL_DIR = "/app/models/whisper"
 
-WHISPER_MODEL_DIR = os.getenv(
-    "WHISPER_MODEL_DIR",
-    "/runpod-volume/whisper",
-)
+# ============================================================
+# 0. Download Qwen3 if not present
+# ============================================================
+os.makedirs(QWEN_MODEL_DIR, exist_ok=True)
+os.makedirs(WHISPER_MODEL_DIR, exist_ok=True)
+
+if not os.path.exists(QWEN_MODEL_PATH):
+    print("=" * 60, flush=True)
+    print("Qwen3 model not found. Downloading from HuggingFace...", flush=True)
+    print("This may take 2-3 minutes on first startup.", flush=True)
+    print("=" * 60, flush=True)
+
+    try:
+        subprocess.run(
+            [
+                "huggingface-cli", "download",
+                "Qwen/Qwen3-1.7B-GGUF",
+                "Qwen3-1.7B-Q4_K_M.gguf",
+                "--local-dir", QWEN_MODEL_DIR,
+            ],
+            check=True,
+        )
+        print("Qwen3 download complete.", flush=True)
+    except Exception as e:
+        print(f"FATAL: Qwen3 download failed: {e}", flush=True)
+        raise e
+else:
+    print(f"Qwen3 already exists at {QWEN_MODEL_PATH}", flush=True)
 
 
 # ============================================================
-# 1. Load Whisper (Speech-to-Text for English + Tamil)
+# 1. Load Whisper (auto-download to WHISPER_MODEL_DIR)
 # ============================================================
-
 print("=" * 60, flush=True)
-print("Loading Whisper model (Speech-to-Text)...", flush=True)
-print(f"Whisper model dir: {WHISPER_MODEL_DIR}", flush=True)
+print("Loading Whisper (Speech-to-Text)...", flush=True)
 
 import torch
 from faster_whisper import WhisperModel
@@ -54,11 +76,9 @@ print("=" * 60, flush=True)
 
 
 # ============================================================
-# 2. Load Qwen3-1.7B Grocery Parser
+# 2. Load Qwen3
 # ============================================================
-
 print("Loading Qwen3-1.7B grocery parser...", flush=True)
-print(f"Qwen model path: {QWEN_MODEL_PATH}", flush=True)
 
 from llama_cpp import Llama
 
@@ -81,7 +101,6 @@ print("=" * 60, flush=True)
 # ============================================================
 # 3. Initialize GroceryParser
 # ============================================================
-
 from grocery_parser import GroceryParser
 
 _grocery_parser = GroceryParser(llm=_llm)
@@ -91,41 +110,32 @@ print("=" * 60, flush=True)
 
 
 # ============================================================
-# Helper: Transcribe with Whisper
+# Helper: Transcribe
 # ============================================================
-
 def _transcribe(wav_path: str) -> str:
     segments, info = _whisper_model.transcribe(wav_path, beam_size=5)
-    print(
-        f"Detected language '{info.language}' "
-        f"with probability {info.language_probability:.2f}",
-        flush=True,
-    )
-    text = " ".join([segment.text for segment in segments])
-    return text.strip()
+    print(f"Detected language '{info.language}' (prob {info.language_probability:.2f})", flush=True)
+    return " ".join([s.text for s in segments]).strip()
 
 
 # ============================================================
-# RunPod Handler Function
+# Handler
 # ============================================================
-
 def handler(job: dict) -> dict:
     wav_path = None
-
     try:
         job_input = job.get("input", {})
         audio_b64 = job_input.get("audio_b64", "")
-
         if not audio_b64:
             return {"error": "audio_b64 is required"}
 
         try:
             wav_bytes = base64.b64decode(audio_b64)
-        except Exception as decode_error:
-            return {"error": f"Invalid base64 audio: {decode_error}"}
+        except Exception as e:
+            return {"error": f"Invalid base64: {e}"}
 
         if not wav_bytes:
-            return {"error": "audio_b64 decoded to empty bytes"}
+            return {"error": "Empty audio"}
 
         with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
             tmp.write(wav_bytes)
@@ -133,37 +143,30 @@ def handler(job: dict) -> dict:
 
         print(f"Audio received: {len(wav_bytes)} bytes", flush=True)
 
-        # 1. Speech to Text (Whisper — auto-detect language)
-        print("Starting Whisper...", flush=True)
         transcript = _transcribe(wav_path)
         print(f"TRANSCRIPT: {transcript}", flush=True)
 
         if not transcript:
-            return {"error": "No speech detected. Please try again."}
+            return {"error": "No speech detected"}
 
-        # 2. Grocery Parsing (Qwen3 — multilingual)
-        print("Starting Qwen3 grocery parser...", flush=True)
-        parsed_result = _grocery_parser.parse(transcript)
+        parsed = _grocery_parser.parse(transcript)
         print("Qwen3 parsing completed.", flush=True)
 
-        if not isinstance(parsed_result, dict):
-            return {"error": "Grocery parser returned invalid result"}
+        if not isinstance(parsed, dict):
+            return {"error": "Invalid parser result"}
 
-        items = parsed_result.get("items")
+        items = parsed.get("items")
         if not isinstance(items, list):
-            return {"error": "Grocery parser did not return items list"}
+            return {"error": "No items list"}
 
-        result = {
-            "transcript": transcript,
-            "items": items,
-        }
-        print(f"VOICE SEARCH SUCCESS: {result}", flush=True)
+        result = {"transcript": transcript, "items": items}
+        print(f"SUCCESS: {result}", flush=True)
         return result
 
-    except Exception as error:
-        print(f"HANDLER ERROR: {repr(error)}", flush=True)
+    except Exception as e:
+        print(f"ERROR: {e}", flush=True)
         traceback.print_exc()
-        return {"error": str(error)}
+        return {"error": str(e)}
 
     finally:
         if wav_path and os.path.exists(wav_path):
@@ -172,10 +175,6 @@ def handler(job: dict) -> dict:
             except Exception:
                 pass
 
-
-# ============================================================
-# Start RunPod Serverless Loop
-# ============================================================
 
 if __name__ == "__main__":
     runpod.serverless.start({"handler": handler})
