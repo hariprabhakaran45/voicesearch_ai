@@ -66,7 +66,7 @@ _device = "cuda" if torch.cuda.is_available() else "cpu"
 _compute_type = "float16" if torch.cuda.is_available() else "int8"
 
 _whisper_model = WhisperModel(
-    "small",
+    "medium",
     device=_device,
     compute_type=_compute_type,
     download_root=WHISPER_MODEL_DIR,
