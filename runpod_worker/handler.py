@@ -1,7 +1,6 @@
 # ============================================================
 # Yuganchin Voice Search AI — RunPod Serverless Handler
 # Whisper (English + Tamil) + Qwen3 (Grocery Parser)
-# Models downloaded at runtime (no Network Volume)
 # ============================================================
 
 import runpod
@@ -35,14 +34,14 @@ if not os.path.exists(QWEN_MODEL_PATH):
     try:
         from huggingface_hub import hf_hub_download
         
-        # CORRECT REPO: Qwen/Qwen3-1.7B (not -GGUF suffix)
+        # VERIFIED REPO for Qwen3 GGUF
         downloaded_path = hf_hub_download(
-            repo_id="Qwen/Qwen3-1.7B",
-            filename="Qwen3-1.7B-Q4_K_M.gguf",
+            repo_id="bartowski/Qwen_Qwen3-1.7B-GGUF",
+            filename="Qwen_Qwen3-1.7B-Q4_K_M.gguf",
             local_dir=QWEN_MODEL_DIR,
         )
         
-        # Rename to our expected path for simplicity
+        # Rename to our expected path
         if os.path.exists(downloaded_path) and downloaded_path != QWEN_MODEL_PATH:
             os.rename(downloaded_path, QWEN_MODEL_PATH)
             
