@@ -1,6 +1,7 @@
 # ============================================================
 # Yuganchin Voice Search AI — RunPod Serverless Handler
 # Whisper (English + Tamil) + Qwen3 (Grocery Parser)
+# Models loaded from Network Volume: /runpod-volume/
 # ============================================================
 
 import runpod
@@ -13,9 +14,17 @@ import traceback
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, "/app")
 
+# ──────────────────────────────────────────────────────────
+# NETWORK VOLUME PATHS
+# ──────────────────────────────────────────────────────────
 QWEN_MODEL_PATH = os.getenv(
     "QWEN_MODEL_PATH",
-    "/app/models/Qwen3-1.7B-Q4_K_M.gguf",
+    "/runpod-volume/Qwen3-1.7B-Q4_K_M.gguf",
+)
+
+WHISPER_MODEL_DIR = os.getenv(
+    "WHISPER_MODEL_DIR",
+    "/runpod-volume/whisper",
 )
 
 
@@ -25,6 +34,7 @@ QWEN_MODEL_PATH = os.getenv(
 
 print("=" * 60, flush=True)
 print("Loading Whisper model (Speech-to-Text)...", flush=True)
+print(f"Whisper model dir: {WHISPER_MODEL_DIR}", flush=True)
 
 import torch
 from faster_whisper import WhisperModel
@@ -36,6 +46,7 @@ _whisper_model = WhisperModel(
     "small",
     device=_device,
     compute_type=_compute_type,
+    download_root=WHISPER_MODEL_DIR,
 )
 
 print(f"Whisper ready on {_device}.", flush=True)
@@ -47,6 +58,7 @@ print("=" * 60, flush=True)
 # ============================================================
 
 print("Loading Qwen3-1.7B grocery parser...", flush=True)
+print(f"Qwen model path: {QWEN_MODEL_PATH}", flush=True)
 
 from llama_cpp import Llama
 
@@ -129,7 +141,7 @@ def handler(job: dict) -> dict:
         if not transcript:
             return {"error": "No speech detected. Please try again."}
 
-        # 2. Grocery Parsing (Qwen3 — already multilingual)
+        # 2. Grocery Parsing (Qwen3 — multilingual)
         print("Starting Qwen3 grocery parser...", flush=True)
         parsed_result = _grocery_parser.parse(transcript)
         print("Qwen3 parsing completed.", flush=True)
