@@ -8,7 +8,6 @@ import runpod
 import base64
 import os
 import sys
-import subprocess
 import tempfile
 import traceback
 
@@ -23,7 +22,7 @@ QWEN_MODEL_PATH = "/app/models/Qwen3-1.7B-Q4_K_M.gguf"
 WHISPER_MODEL_DIR = "/app/models/whisper"
 
 # ============================================================
-# 0. Download Qwen3 if not present
+# 0. Download Qwen3 if not present (Using Python API)
 # ============================================================
 os.makedirs(QWEN_MODEL_DIR, exist_ok=True)
 os.makedirs(WHISPER_MODEL_DIR, exist_ok=True)
@@ -35,14 +34,14 @@ if not os.path.exists(QWEN_MODEL_PATH):
     print("=" * 60, flush=True)
 
     try:
-        subprocess.run(
-            [
-                "huggingface-cli", "download",
-                "Qwen/Qwen3-1.7B-GGUF",
-                "Qwen3-1.7B-Q4_K_M.gguf",
-                "--local-dir", QWEN_MODEL_DIR,
-            ],
-            check=True,
+        from huggingface_hub import hf_hub_download
+        
+        # Download the file directly to our models directory
+        hf_hub_download(
+            repo_id="Qwen/Qwen3-1.7B-GGUF",
+            filename="Qwen3-1.7B-Q4_K_M.gguf",
+            local_dir=QWEN_MODEL_DIR,
+            local_dir_use_symlinks=False
         )
         print("Qwen3 download complete.", flush=True)
     except Exception as e:
