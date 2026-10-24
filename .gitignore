@@ -1,15 +1,45 @@
-.env
-.venv/
+# Virtual environment
 venv/
-NeMo/
 __pycache__/
-*.py[cod]
+*.pyc
+*.pyo
+
+# Environment variables (NEVER commit)
+.env
+.env.local
+
+# Models (too large for git, use Git LFS or Network Volume)
+models/*.nemo
+models/*.gguf
+whisper_model/
+
+# Logs
 *.log
 
-# Model checkpoints are large; use Git LFS if they need to be versioned.
-models/
+# OS files
+.DS_Store
+Thumbs.db
 
-# Local test recordings
-test_*.wav
-NeMo/
+# IDE
 .vscode/
+.idea/
+
+# Docker build cache
+.dockerignore
+EOFNeMo/
+
+# Large folders
+NeMo/
+whisper_model/
+
+# Test audio files
+*.wav
+*.mp3
+*.m4a
+*.mp4
+*.ogg
+*.webm
+
+# Patch files
+*.v3patch
+*.patch
